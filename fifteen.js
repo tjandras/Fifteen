@@ -1,4 +1,125 @@
+var Result = function(seconds, steps) {
+    "use strict";
+
+    this.time = seconds;
+    this.moves = steps;
+
+    this.serialize = function() {
+        return this.time + ',' + this.moves;
+    };
+
+    this.deserialize = function(result) {
+        var parts = result.split(',');
+        this.time = parts[0];
+        this.moves = parts[1];
+        return this;
+    };
+
+    this.output = function() {
+        var p = document.createElement('p');
+        var min = (this.time/60>>0); //http://stackoverflow.com/questions/4228356/integer-division-in-javascript
+        var sec = this.time - min*60;
+        p.appendChild(document.createTextNode((min < 10 ? '0' + min : min) + ':'
+            + (sec < 10 ? '0' + sec : sec) + ' | ' + this.moves + ' moves'));
+        return p;
+    };
+};
+
+var ResultStore = function(container, resultListSize) {
+    "use strict";
+
+    var localStorageSupported = true;
+    var localStorageTopTimesKey = 'fifteen.toptimes';
+    var topResults = [];
+
+    var initResults = function() {
+        var resultsByTime = localStorage.getItem(localStorageTopTimesKey);
+        if (resultsByTime) {        
+            var resultsArr = resultsByTime.split(';');
+            for (var i = 0; i < resultsArr.length; ++i) {
+                var res = new Result().deserialize(resultsArr[i]);
+                topResults.push(res);
+                container.appendChild(res.output());
+            }
+        }
+    };
+
+    this.add = function(newResult) {
+        if (localStorageSupported) {
+            topResults.push(newResult);
+            orderResults();
+            storeResults();
+            redrawResults();
+        }
+    };
+
+    var orderResults = function() {
+        topResults.sort(function(r1, r2) {
+            if (r1.time < r2.time) {
+                return -1;
+            }
+            if (r1.time > r2.time) {
+                return 1;
+            }
+            if (r1.moves < r2.moves) {
+                return -1;
+            }
+            if (r1.moves > r2.moves) {
+                return 1;
+            }
+            return 0;
+        });
+        while (topResults.length > resultListSize) {
+            topResults.pop();
+        }
+    };
+
+    var storeResults = function() {
+        localStorage.setItem(localStorageTopTimesKey, serializeResults());
+    };
+
+    var serializeResults = function() {
+        var ser = topResults.reduce(function(previous, current, index) {
+            if (index > 0) {
+                previous += ';';
+            }
+            return previous + current.serialize();
+        }, '');
+        return ser;
+    };
+
+    var redrawResults = function() {
+        container.innerHTML = '';
+        for (var i = 0; i < topResults.length; ++i) {
+            container.appendChild(topResults[i].output());
+        };
+    };
+
+    var testFeature = function() {
+        // From modernizr
+        var mod = 'modernizr';
+        try {
+          localStorage.setItem(mod, mod);
+          localStorage.removeItem(mod);
+          return true;
+        } catch (e) {
+          return false;
+        }
+    };
+
+    if (testFeature() === true) {
+        initResults();
+    } else {
+        var localStorageSupported = false;
+        var noStorageElem = document.createElement('p');
+        noStorageElem.appendChild(document.createTextNode("Your browser does not support local storage. Your top results cannot be saved."));
+        container.appendChild(noStorageElem);
+    }
+};
+
 (function (Fifteen) {
+    "use strict";
+
     var self = Fifteen;
     var finalStanding = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, -1];
     // http://www.math.ubc.ca/~cass/courses/m308-02b/projects/grant/fifteen.html
@@ -12,7 +133,7 @@
     var timeContainer = document.getElementById('time');
     var timerInterval;
     var startDate;
-
+    var resultStore;
 
     self.init = function () {
         getCellReferences();
@@ -31,6 +152,8 @@
                 return -1;
             }
         }
+
+        resultStore = new ResultStore(document.getElementById('results'), 10);
     };
 
     var getCellReferences = function () {
@@ -79,6 +202,7 @@
            if (!confirm('A game is already started. Do you want to start a new one?')) {
                return;
            }
+           clearInterval(timerInterval);
         }
 
         gameInProgress = true;
@@ -119,10 +243,12 @@
     };
 
     var updateTime = function() {
-        var diffSec = Math.floor((Date.now() - startDate) / 1000);
+        var totalSec = Math.floor((Date.now() - startDate) / 1000);
+        var diffSec = totalSec;
         var diffMin = Math.floor(diffSec / 60);
         diffSec -= diffMin * 60;
         timeContainer.innerHTML = (diffMin < 10 ? '0' + diffMin : diffMin) + ':' + (diffSec < 10 ? '0' + diffSec : diffSec);
+        return totalSec;
     };
 
     var shuffle = function (array) {
@@ -183,6 +309,7 @@
         if (key == 'F2') {
             shuffleBoard(event);
         }
+
         if (key.indexOf('Arrow') === 0) {
             tileMoved(event, key);
         }
@@ -282,7 +409,7 @@
         var index = 0;
         for (var i = 0, row; row = board[i]; i++) {
             for (var j = 0; j < row.length; j++) {
-                boardValue = board[i][j];
+                var boardValue = board[i][j];
                 if (boardValue === ''){
                     boardValue = -1;
                 }
@@ -294,8 +421,8 @@
         }
 
         clearInterval(timerInterval);
-        updateTime();
         gameInProgress = false;
+        resultStore.add(new Result(updateTime(), moves));
         alert('Done! :)');
     };
 })(window.Fifteen = window.Fifteen || {});
