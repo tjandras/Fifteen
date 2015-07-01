@@ -5,6 +5,16 @@
     <meta charset="utf-8" />
     <title>Fifteen</title>
     <style>
+        .board {
+            float: left;
+            width: 58%;
+        }
+
+        .results {
+            float: right;
+            width: 40%;
+        }
+
         #board {
             border: 1px solid #000;
         }
@@ -24,41 +34,49 @@
             font-size: 24px;
             font-weight: bold;
         }
+
+        h1 span {
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
-    <h1>Fifteen Puzzle</h1>
-    <p><a id="f2" href="#">New Game</a> | Time: <span id="time">00:00</span> | Moves: <span id="moves">0</span></p>
+    <div class="board">
+        <h1>Fifteen Puzzle</h1>
+        <p><a id="f2" href="#">New Game</a> | Time: <span id="time">00:00</span> | Moves: <span id="moves">0</span></p>
 
-    <table id="board">
-        <tr>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-        </tr>
-        <tr>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-        </tr>
-        <tr>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-        </tr>
-        <tr>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-        </tr>
-    </table>
+        <table id="board">
+            <tr>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+        </table>
+    </div>
 
-    <h2>Top reults</h2>
-    <div id="results"></div>
+    <div class="results">
+        <h1>Top reults <span>(<a href="#" id="clear">Clear</a>)</span></h1>
+        <div id="results"></div>
+    </div>
 
     <script src="core.js"></script>
     <script src="fifteen.js"></script>
