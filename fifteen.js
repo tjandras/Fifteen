@@ -1,31 +1,57 @@
-var Result = function(seconds, steps) {
+String.prototype.hashCode = function() { // From: http://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript-jquery
+    "use strict";
+    var hash = 0, i, chr, len;
+    if (this.length == 0) {
+        return hash;
+    }
+    for (i = 0, len = this.length; i < len; i++) {
+        chr   = this.charCodeAt(i);
+        hash  = ((hash << 5) - hash) + chr;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+};
+
+var Result = function(seconds, steps, startPermutation) {
     "use strict";
 
-    this.time = seconds;
-    this.moves = steps;
+    if (arguments.length === 3) {
+        this.permutationId = startPermutation.toString().hashCode(); 
+        this.time = seconds;
+        this.moves = steps;
+        this.initialPermutation = startPermutation;
+    }
 
     this.serialize = function() {
-        return this.time + ',' + this.moves;
+        return this.permutationId + '/' + this.time + '/' + this.moves + '/' + this.initialPermutation;
     };
 
     this.deserialize = function(result) {
-        var parts = result.split(',');
-        this.time = parts[0];
-        this.moves = parts[1];
+        var parts = result.split('/');
+        this.permutationId = parts[0];
+        this.time = parts[1];
+        this.moves = parts[2];
+        this.initialPermutation = parts[3].split(',');
         return this;
     };
 
-    this.output = function() {
+    this.output = function(index, loadClickCallback) {
         var p = document.createElement('p');
         var min = (this.time/60>>0); //http://stackoverflow.com/questions/4228356/integer-division-in-javascript
         var sec = this.time - min*60;
         p.appendChild(document.createTextNode((min < 10 ? '0' + min : min) + ':'
-            + (sec < 10 ? '0' + sec : sec) + ' | ' + this.moves + ' moves'));
+            + (sec < 10 ? '0' + sec : sec) + ' | ' + this.moves + ' moves (' + this.permutationId + ') '));
+        var loadLink = document.createElement('a');
+        loadLink.setAttribute('href', '#');
+        loadLink.setAttribute('data-index', index);
+        loadLink.appendChild(document.createTextNode('Load this game'));
+        core.addEventListener(loadLink, 'click', loadClickCallback);
+        p.appendChild(loadLink);
         return p;
     };
 };
 
-var ResultStore = function(container, resultListSize) {
+var ResultStore = function(container, clearElement, resultListSize, loadGameCallback) {
     "use strict";
 
     var localStorageSupported = true;
@@ -39,9 +65,10 @@ var ResultStore = function(container, resultListSize) {
             for (var i = 0; i < resultsArr.length; ++i) {
                 var res = new Result().deserialize(resultsArr[i]);
                 topResults.push(res);
-                container.appendChild(res.output());
+                container.appendChild(res.output(i, loadGameCallback));
             }
         }
+        core.addEventListener(clearElement, 'click', clearResults);
     };
 
     this.add = function(newResult) {
@@ -51,6 +78,10 @@ var ResultStore = function(container, resultListSize) {
             storeResults();
             redrawResults();
         }
+    };
+
+    this.loadPermutation = function(index) {
+        return topResults[index].initialPermutation;
     };
 
     var orderResults = function() {
@@ -79,19 +110,17 @@ var ResultStore = function(container, resultListSize) {
     };
 
     var serializeResults = function() {
-        var ser = topResults.reduce(function(previous, current, index) {
-            if (index > 0) {
-                previous += ';';
-            }
-            return previous + current.serialize();
-        }, '');
-        return ser;
+        var ser = '';
+        for(var i = 0, result; result = topResults[i]; ++i) { // reduce not supported in IE < 9
+            ser += result.serialize() + ';';
+        }
+        return ser.slice(0, -1);
     };
 
     var redrawResults = function() {
         container.innerHTML = '';
         for (var i = 0; i < topResults.length; ++i) {
-            container.appendChild(topResults[i].output());
+            container.appendChild(topResults[i].output(i, loadGameCallback));
         };
     };
 
@@ -106,6 +135,15 @@ var ResultStore = function(container, resultListSize) {
           return false;
         }
     };
+
+    var clearResults = function(event) {
+        core.preventDefault(event);
+        if (confirm('Do you really want to clear the top results?') === true) {
+            localStorage.clear();
+            topResults = [];
+            redrawResults();
+        }
+    }
 
     if (testFeature() === true) {
         initResults();
@@ -122,12 +160,12 @@ var ResultStore = function(container, resultListSize) {
 
     var self = Fifteen;
     var finalStanding = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, -1];
-    // http://www.math.ubc.ca/~cass/courses/m308-02b/projects/grant/fifteen.html
-    var greenPositions = [0, 2, 5, 7, 8, 10, 13, 15];
+    var greenPositions = [0, 2, 5, 7, 8, 10, 13, 15]; // http://www.math.ubc.ca/~cass/courses/m308-02b/projects/grant/fifteen.html
     var board;
     var rows;
     var emptyCell = [];
     var gameInProgress = false;
+    var initialPermutation;
     var moves = 0;
     var moveContainer = document.getElementById('moves');
     var timeContainer = document.getElementById('time');
@@ -138,7 +176,7 @@ var ResultStore = function(container, resultListSize) {
     self.init = function () {
         getCellReferences();
         initBoard();
-        core.addEventListener(document.getElementById('f2'), 'click', shuffleBoard);
+        core.addEventListener(document.getElementById('f2'), 'click', newGameClickHandler);
         core.addEventListener(document, 'keydown', handleKeyDown);
 
         if (!Array.prototype.indexOf) {
@@ -153,7 +191,11 @@ var ResultStore = function(container, resultListSize) {
             }
         }
 
-        resultStore = new ResultStore(document.getElementById('results'), 10);
+        resultStore = new ResultStore(document.getElementById('results'), document.getElementById('clear'), 10, loadGame);
+    };
+
+    self.printInitialPermutation = function (argument) {
+        console.log(initialPermutation);
     };
 
     var getCellReferences = function () {
@@ -195,9 +237,16 @@ var ResultStore = function(container, resultListSize) {
         }
     };
 
-    var shuffleBoard = function (event) {
+    var newGameClickHandler = function(event) {
         core.preventDefault(event);
+        shuffleBoard(null);
+    };
 
+    var loadGame = function(event) {
+        shuffleBoard(this.getAttribute('data-index'));
+    };
+
+    var shuffleBoard = function (resultId) {
         if (gameInProgress) {
            if (!confirm('A game is already started. Do you want to start a new one?')) {
                return;
@@ -209,11 +258,15 @@ var ResultStore = function(container, resultListSize) {
         moves = 0;
         updateMoveCounter(moves);
         startDate = Date.now();
-        timerInterval = setInterval(updateTime, 1000);
+        
+        if (resultId === null) {
+            initialPermutation = finalStanding.slice(0);
+            shuffle(initialPermutation);
+        } else {
+            initialPermutation = resultStore.loadPermutation(resultId);
+        }    
 
-        var tempArray = finalStanding.slice(0);
-        shuffle(tempArray);
-        for (var i = 0, value; value = tempArray[i]; i++) {
+        for (var i = 0, value; value = +initialPermutation[i]; i++) {
             var row = Math.floor(i / 4);
             var column = i % 4;
             updateTile(row, column, value);
@@ -221,6 +274,8 @@ var ResultStore = function(container, resultListSize) {
                 emptyCell = [row, column];
             }
         }
+
+        timerInterval = setInterval(updateTime, 1000);
     };
 
     var updateTile = function (row, column, newValue) {
@@ -262,7 +317,6 @@ var ResultStore = function(container, resultListSize) {
         while (length) {
             // Pick a remaining element…
             randomElement = Math.floor(Math.random() * length--);
-
             // And swap it with the current element.
             swap(array, length, randomElement);
         }
@@ -307,7 +361,7 @@ var ResultStore = function(container, resultListSize) {
         var key = getKey(event);
         
         if (key == 'F2') {
-            shuffleBoard(event);
+            newGameClickHandler(event);
         }
 
         if (key.indexOf('Arrow') === 0) {
@@ -406,6 +460,7 @@ var ResultStore = function(container, resultListSize) {
         if (!gameInProgress) {
             return;
         }
+        
         var index = 0;
         for (var i = 0, row; row = board[i]; i++) {
             for (var j = 0; j < row.length; j++) {
@@ -422,7 +477,7 @@ var ResultStore = function(container, resultListSize) {
 
         clearInterval(timerInterval);
         gameInProgress = false;
-        resultStore.add(new Result(updateTime(), moves));
+        resultStore.add(new Result(updateTime(), moves, initialPermutation));
         alert('Done! :)');
     };
 })(window.Fifteen = window.Fifteen || {});
